@@ -1407,13 +1407,28 @@ interface ExtractedMessage {
   downloadCodes: string[];
   /** 文件名列表（与 downloadCodes 对应，用于文件类型消息） */
   fileNames: string[];
+  /** 艾特的钉钉用户ID列表 */
+  atDingtalkIds: string[];
+  /** 艾特的手机号列表 */
+  atMobiles: string[];
 }
 
 function extractMessageContent(data: any): ExtractedMessage {
   const msgtype = data.msgtype || 'text';
   switch (msgtype) {
-    case 'text':
-      return { text: data.text?.content?.trim() || '', messageType: 'text', imageUrls: [], downloadCodes: [], fileNames: [] };
+    case 'text': {
+      const atDingtalkIds = data.text?.at?.atDingtalkIds || [];
+      const atMobiles = data.text?.at?.atMobiles || [];
+      return { 
+        text: data.text?.content?.trim() || '', 
+        messageType: 'text', 
+        imageUrls: [], 
+        downloadCodes: [], 
+        fileNames: [],
+        atDingtalkIds,
+        atMobiles
+      };
+    }
     case 'richText': {
       const parts = data.content?.richText || [];
       const textParts: string[] = [];
@@ -1433,7 +1448,7 @@ function extractMessageContent(data: any): ExtractedMessage {
       }
 
       const text = textParts.join('') || (imageUrls.length > 0 ? '[图片]' : '[富文本消息]');
-      return { text, messageType: 'richText', imageUrls, downloadCodes: [], fileNames: [] };
+      return { text, messageType: 'richText', imageUrls, downloadCodes: [], fileNames: [], atDingtalkIds: [], atMobiles: [] };
     }
     case 'picture': {
       const downloadCode = data.content?.downloadCode || '';
@@ -1448,12 +1463,12 @@ function extractMessageContent(data: any): ExtractedMessage {
         downloadCodes.push(downloadCode);
       }
 
-      return { text: '[图片]', messageType: 'picture', imageUrls, downloadCodes, fileNames: [] };
+      return { text: '[图片]', messageType: 'picture', imageUrls, downloadCodes, fileNames: [], atDingtalkIds: [], atMobiles: [] };
     }
     case 'audio':
-      return { text: data.content?.recognition || '[语音消息]', messageType: 'audio', imageUrls: [], downloadCodes: [], fileNames: [] };
+      return { text: data.content?.recognition || '[语音消息]', messageType: 'audio', imageUrls: [], downloadCodes: [], fileNames: [], atDingtalkIds: [], atMobiles: [] };
     case 'video':
-      return { text: '[视频]', messageType: 'video', imageUrls: [], downloadCodes: [], fileNames: [] };
+      return { text: '[视频]', messageType: 'video', imageUrls: [], downloadCodes: [], fileNames: [], atDingtalkIds: [], atMobiles: [] };
     case 'file': {
       const fileName = data.content?.fileName || '文件';
       const downloadCode = data.content?.downloadCode || '';
@@ -1463,10 +1478,10 @@ function extractMessageContent(data: any): ExtractedMessage {
         downloadCodes.push(downloadCode);
         fileNames.push(fileName);
       }
-      return { text: `[文件: ${fileName}]`, messageType: 'file', imageUrls: [], downloadCodes, fileNames };
+      return { text: `[文件: ${fileName}]`, messageType: 'file', imageUrls: [], downloadCodes, fileNames, atDingtalkIds: [], atMobiles: [] };
     }
     default:
-      return { text: data.text?.content?.trim() || `[${msgtype}消息]`, messageType: msgtype, imageUrls: [], downloadCodes: [], fileNames: [] };
+      return { text: data.text?.content?.trim() || `[${msgtype}消息]`, messageType: msgtype, imageUrls: [], downloadCodes: [], fileNames: [], atDingtalkIds: [], atMobiles: [] };
   }
 }
 
@@ -1577,7 +1592,7 @@ function buildDeliverBody(
   return {
     ...base,
     openSpaceId: `dtv1.card//IM_ROBOT.${target.userId}`,
-    imRobotOpenDeliverModel: { spaceType: 'IM_ROBOT' },
+    imRobotOpenDeliverModel: { spaceType: 'IM_ROBOT', robotCode },
   };
 }
 
@@ -2924,6 +2939,7 @@ const dingtalkPlugin = {
         gatewayToken: { type: 'string', default: '', description: 'Gateway auth token (Bearer)' },
         gatewayPassword: { type: 'string', default: '', description: 'Gateway auth password (alternative to token)' },
         sessionTimeout: { type: 'number', default: 1800000, description: 'Session timeout in ms (default 30min)' },
+        botDingUid: { type: 'string', default: '', description: 'Bot\'s DingTalk user ID for mention detection (optional)' },
         debug: { type: 'boolean', default: false },
       },
       required: ['clientId', 'clientSecret'],
