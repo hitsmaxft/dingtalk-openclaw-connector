@@ -13,6 +13,8 @@ and version numbers follow [Semantic Versioning](https://semver.org/).
   **Fixed Stream client frequent reconnection issue** - Disabled `DWClient` built-in `autoReconnect`, reconnection is now managed by framework's health-monitor to avoid dual reconnection mechanism conflict
 - 🐛 **修复连接关闭不完整问题** - `stop()` 方法现在正确调用 `client.disconnect()` 关闭 WebSocket 连接  
   **Fixed incomplete connection closure** - `stop()` method now correctly calls `client.disconnect()` to close WebSocket connection
+- 🐛 **Gateway 端口连接修复** - 修复修改 gateway 端口后无法连接的问题
+  **Gateway port connection fix** - Fixed issue where connection fails after modifying gateway port
 
 ### 重构 / Refactoring
 - ✅ **OpenClaw session.dmScope 机制** - 会话管理由 OpenClaw Gateway 统一处理，插件不再内部管理会话超时  
