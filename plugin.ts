@@ -1377,13 +1377,15 @@ interface GatewayOptions {
   peerKind?: 'direct' | 'group';
   /** 发送者 ID，用于 bindings 匹配 */
   peerId?: string;
+  gatewayPort?: number;
   log?: any;
 }
 
 async function* streamFromGateway(options: GatewayOptions, accountId: string): AsyncGenerator<string, void, unknown> {
-  const { userContent, systemPrompts, sessionKey, gatewayAuth, memoryUser, imageLocalPaths, peerKind, peerId, log } = options;
+  const { userContent, systemPrompts, sessionKey, gatewayAuth, memoryUser, imageLocalPaths, peerKind, peerId, gatewayPort, log } = options;
   const rt = getRuntime();
-  const gatewayUrl = `http://127.0.0.1:${rt.gateway?.port || 18789}/v1/chat/completions`;
+  const port = gatewayPort || rt.gateway?.port || 18789;
+  const gatewayUrl = `http://127.0.0.1:${port}/v1/chat/completions`;
 
   const messages: any[] = [];
   for (const prompt of systemPrompts) {
@@ -2717,6 +2719,7 @@ async function handleDingTalkMessage(params: {
         imageLocalPaths: imageLocalPaths.length > 0 ? imageLocalPaths : undefined,
         peerKind,
         peerId,
+        gatewayPort: cfg.gateway?.port,
         log,
       }, accountId)) {
         fullResponse += chunk;
@@ -2793,6 +2796,7 @@ async function handleDingTalkMessage(params: {
         imageLocalPaths: imageLocalPaths.length > 0 ? imageLocalPaths : undefined,
         peerKind,
         peerId,
+        gatewayPort: cfg.gateway?.port,
         log,
       }, accountId)) {
         accumulated += chunk;
@@ -2876,6 +2880,7 @@ async function handleDingTalkMessage(params: {
         imageLocalPaths: imageLocalPaths.length > 0 ? imageLocalPaths : undefined,
         peerKind,
         peerId,
+        gatewayPort: cfg.gateway?.port,
         log,
       }, accountId)) {
         fullResponse += chunk;
