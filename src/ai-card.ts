@@ -22,6 +22,7 @@ export async function createAICardForTarget(
   token: string,
   log?: any,
 ): Promise<string | null> {
+  console.log(`[DingTalk][createAICardForTarget] Starting, target=${JSON.stringify(target)}, templateId=${cfg.aiCardTemplateId || 'StandardCard'}`);
   try {
     const resp = await axios.post(
       'https://api.dingtalk.com/v1.0/im/interactiveCards/instances',
@@ -44,13 +45,16 @@ export async function createAICardForTarget(
 
     if (resp.data?.success && resp.data?.result?.cardInstanceId) {
       const cardId = resp.data.result.cardInstanceId;
+      console.log(`[DingTalk][createAICardForTarget] AI Card created successfully: ${cardId}`);
       log?.info?.(`[DingTalk][createAICardForTarget] AI Card 创建成功: ${cardId}`);
       return cardId;
     }
 
+    console.error(`[DingTalk][createAICardForTarget] Failed to create AI Card: ${JSON.stringify(resp.data)}`);
     log?.error?.(`[DingTalk][createAICardForTarget] 创建失败: ${JSON.stringify(resp.data)}`);
     return null;
   } catch (err: any) {
+    console.error(`[DingTalk][createAICardForTarget] Error: ${err?.message || err}`);
     log?.error?.(`[DingTalk][createAICardForTarget] 错误: ${err?.message || err}`);
     return null;
   }
@@ -67,6 +71,7 @@ export async function streamAICard(
   token: string,
   log?: any,
 ): Promise<void> {
+  console.log(`[DingTalk][streamAICard] Updating AI Card: ${cardId}, content length: ${content?.length || 0}`);
   try {
     await axios.put(
       `https://api.dingtalk.com/v1.0/im/interactiveCards/instances/${cardId}`,
@@ -83,8 +88,10 @@ export async function streamAICard(
       },
     );
 
+    console.log(`[DingTalk][streamAICard] AI Card updated successfully: ${cardId}`);
     log?.debug?.(`[DingTalk][streamAICard] AI Card 更新成功: ${cardId}`);
   } catch (err: any) {
+    console.error(`[DingTalk][streamAICard] Failed to update AI Card: ${err?.message || err}`);
     log?.error?.(`[DingTalk][streamAICard] 更新失败: ${err?.message || err}`);
   }
 }
@@ -100,6 +107,7 @@ export async function finishAICard(
   token: string,
   log?: any,
 ): Promise<void> {
+  console.log(`[DingTalk][finishAICard] Finishing AI Card: ${cardId}, content length: ${content?.length || 0}`);
   try {
     await axios.put(
       `https://api.dingtalk.com/v1.0/im/interactiveCards/instances/${cardId}`,
@@ -117,8 +125,10 @@ export async function finishAICard(
       },
     );
 
+    console.log(`[DingTalk][finishAICard] AI Card finished successfully: ${cardId}`);
     log?.info?.(`[DingTalk][finishAICard] AI Card 完成: ${cardId}`);
   } catch (err: any) {
+    console.error(`[DingTalk][finishAICard] Failed to finish AI Card: ${err?.message || err}`);
     log?.error?.(`[DingTalk][finishAICard] 完成失败: ${err?.message || err}`);
   }
 }

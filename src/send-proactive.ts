@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { getOapiAccessToken } from './oapi-token';
+import { sendAICardInternal, type AICardTarget } from './ai-card';
 
 export interface ProactiveTarget {
   userId?: string;
@@ -28,6 +29,25 @@ export async function sendProactive(
   const token = await getOapiAccessToken(cfg);
   if (!token) {
     throw new Error('无法获取 access_token');
+  }
+
+  // 如果需要使用 AI Card
+  if (useAICard) {
+    try {
+      const aiCardTarget: AICardTarget = target.openConversationId
+        ? { type: 'group', openConversationId: target.openConversationId }
+        : { type: 'user', userId: target.userId! };
+
+      await sendAICardInternal(cfg, aiCardTarget, content, token, log);
+      log?.info?.(`[DingTalk][sendProactive] AI Card 发送成功`);
+      return;
+    } catch (err: any) {
+      log?.error?.(`[DingTalk][sendProactive] AI Card 发送失败: ${err?.message || err}`);
+      if (!fallbackToNormal) {
+        throw err;
+      }
+      log?.info?.(`[DingTalk][sendProactive] 降级到普通消息`);
+    }
   }
 
   // 构建消息体

@@ -1,15 +1,12 @@
-import type { ReplyDispatcher, ReplyDispatcherOptions, ReplyItem } from '@openclaw/core';
+import type { ReplyDispatcher, GetReplyOptions, ReplyPayload } from 'openclaw/plugin-sdk';
 import type { DingTalkConfig } from '../plugin';
 import {
-  createAICardForTarget, finishAICard, streamAICard, sendAICardInternal,
+  createAICardForTarget, finishAICard, streamAICard,
   createPlainCard, finishPlainCard,
   type AICardTarget, type AICardConfig, type PlainCardConfig
 } from './ai-card';
-import { sendProactive, type ProactiveTarget, type SendProactiveOptions } from './send-proactive';
+import { sendProactive, type ProactiveTarget } from './send-proactive';
 import { processLocalImages } from './process-local-images';
-import { processVideoMarkers } from './process-video-markers';
-import { processAudioMarkers } from './process-audio-markers';
-import { processFileMarkers } from './process-file-markers';
 import { getOapiAccessToken } from './oapi-token';
 
 export interface DingtalkReplyDispatcherOptions {
@@ -24,7 +21,7 @@ export interface DingtalkReplyDispatcherOptions {
 
 export interface DingtalkReplyDispatcherResult {
   dispatcher: ReplyDispatcher;
-  replyOptions: ReplyDispatcherOptions;
+  replyOptions: Omit<GetReplyOptions, 'onToolResult' | 'onBlockReply'>;
   markDispatchIdle: () => void;
 }
 
@@ -94,365 +91,291 @@ export function createDingtalkReplyDispatcher(
     if (!token) return text;
 
     // 处理本地图片
-    let processed = await processLocalImages(text, token, log);
-
-    // 构建 AI Card 目标用于媒体处理
-    const aiCardTarget = buildAICardTarget();
-
-    // 处理视频标记
-    processed = await processVideoMarkers(processed, '', dingtalkConfig, token, log, true, aiCardTarget);
-
-    // 处理音频标记
-    processed = await processAudioMarkers(processed, '', dingtalkConfig, token, log, true, aiCardTarget);
-
-    // 处理文件标记
-    processed = await processFileMarkers(processed, '', dingtalkConfig, token, log, true, aiCardTarget);
+    const processed = await processLocalImages(text, token, log);
 
     return processed;
   };
 
-  // 创建 dispatcher
-  const dispatcher: ReplyDispatcher = {
-    async deliver(item: ReplyItem, opts?: ReplyDispatcherOptions): Promise<void> {
-      isIdle = false;
+  // 初始化卡片（AI Card 或普通卡片）
+  const initCard = async (): Promise<boolean> => {
+    console.log(`[DingTalk][Dispatcher] initCard called, usePlainCard=${usePlainCard}`);
+    const token = await ensureToken();
+    if (!token) {
+      console.error('[DingTalk][Dispatcher] Cannot get token, skipping card creation');
+      log?.warn?.('[DingTalk][Dispatcher] 无法获取 token，跳过卡片创建');
+      return false;
+    }
 
-      try {
-        const proactiveTarget = buildProactiveTarget();
-        const aiCardTarget = buildAICardTarget();
+    const aiCardTarget = buildAICardTarget();
+    console.log(`[DingTalk][Dispatcher] Building AI Card target: ${JSON.stringify(aiCardTarget)}`);
 
-        switch (item.type) {
-          case 'text': {
-            // 纯文本消息
-            const text = item.text || '';
-            const processedText = await processTextWithMedia(text);
+    if (usePlainCard) {
+      // 创建普通卡片
+      const cardConfig: PlainCardConfig = {
+        title: 'AI 助手',
+        content: '',
+      };
 
-            await sendProactive(dingtalkConfig, proactiveTarget, processedText, {
-              msgType: 'text',
-              useAICard: false,
-              fallbackToNormal: true,
-              log,
-            });
-            break;
-          }
+      console.log(`[DingTalk][Dispatcher] Creating plain card...`);
+      const cardId = await createPlainCard(
+        dingtalkConfig,
+        aiCardTarget,
+        cardConfig,
+        token,
+        log,
+      );
 
-          case 'markdown': {
-            // Markdown 消息
-            const markdown = item.markdown || item.text || '';
-            const processedMarkdown = await processTextWithMedia(markdown);
-
-            await sendProactive(dingtalkConfig, proactiveTarget, processedMarkdown, {
-              msgType: 'markdown',
-              useAICard: false,
-              fallbackToNormal: true,
-              log,
-            });
-            break;
-          }
-
-          case 'thinking': {
-            // 思考内容 - 可以选择忽略或作为调试信息
-            log?.debug?.(`[DingTalk][Dispatcher] Thinking: ${item.text?.slice(0, 100)}...`);
-            break;
-          }
-
-          case 'tool_use': {
-            // 工具使用 - 记录日志
-            log?.info?.(`[DingTalk][Dispatcher] Tool use: ${item.name}`);
-            break;
-          }
-
-          case 'tool_result': {
-            // 工具结果 - 记录日志
-            log?.info?.(`[DingTalk][Dispatcher] Tool result: ${item.tool_use_id}`);
-            break;
-          }
-
-          case 'ai_card_start': {
-            // 开始卡片流式输出（AI Card 或普通卡片）
-            const token = await ensureToken();
-            if (!token) {
-              log?.warn?.('[DingTalk][Dispatcher] 无法获取 token，跳过卡片创建');
-              break;
-            }
-
-            if (usePlainCard) {
-              // 创建普通卡片
-              const cardConfig: PlainCardConfig = {
-                title: item.title || 'AI 助手',
-                content: '',
-              };
-
-              const cardId = await createPlainCard(
-                dingtalkConfig,
-                aiCardTarget,
-                cardConfig,
-                token,
-                log,
-              );
-
-              if (cardId) {
-                pendingPlainCard = {
-                  cardId,
-                  cardConfig,
-                  target: aiCardTarget,
-                };
-                plainCardContent = '';
-                log?.info?.(`[DingTalk][Dispatcher] 普通卡片创建成功: ${cardId}`);
-              }
-            } else {
-              // 创建 AI Card
-              const cardConfig: AICardConfig = {
-                title: item.title || 'AI 助手',
-                content: '',
-              };
-
-              const cardId = await createAICardForTarget(
-                dingtalkConfig,
-                aiCardTarget,
-                cardConfig,
-                token,
-                log,
-              );
-
-              if (cardId) {
-                pendingAICard = {
-                  cardId,
-                  cardConfig,
-                  target: aiCardTarget,
-                };
-                aiCardContent = '';
-                log?.info?.(`[DingTalk][Dispatcher] AI Card 创建成功: ${cardId}`);
-              }
-            }
-            break;
-          }
-
-          case 'ai_card_chunk': {
-            // 卡片流式内容块（AI Card 支持流式更新，普通卡片只累积内容）
-            if (usePlainCard && pendingPlainCard) {
-              // 普通卡片：只累积内容，不流式更新
-              plainCardContent += item.text || '';
-            } else if (pendingAICard) {
-              // AI Card：累积内容并流式更新
-              const token = await ensureToken();
-              if (!token) break;
-
-              aiCardContent += item.text || '';
-
-              await streamAICard(
-                dingtalkConfig,
-                pendingAICard.cardId,
-                aiCardContent,
-                pendingAICard.target,
-                token,
-                log,
-              );
-            } else {
-              log?.warn?.('[DingTalk][Dispatcher] 没有待处理的卡片，跳过 chunk');
-            }
-            break;
-          }
-
-          case 'ai_card_end': {
-            // 结束卡片流式输出（AI Card 或普通卡片）
-            const token = await ensureToken();
-            if (!token) break;
-
-            if (usePlainCard && pendingPlainCard) {
-              // 后处理最终内容
-              const finalContent = await processTextWithMedia(plainCardContent);
-
-              // 完成普通卡片
-              await finishPlainCard(
-                dingtalkConfig,
-                pendingPlainCard.cardId,
-                finalContent,
-                pendingPlainCard.target,
-                token,
-                log,
-              );
-
-              log?.info?.(`[DingTalk][Dispatcher] 普通卡片完成: ${pendingPlainCard.cardId}`);
-
-              // 清理状态
-              pendingPlainCard = null;
-              plainCardContent = '';
-            } else if (pendingAICard) {
-              // 后处理最终内容
-              const finalContent = await processTextWithMedia(aiCardContent);
-
-              // 完成 AI Card
-              await finishAICard(
-                dingtalkConfig,
-                pendingAICard.cardId,
-                finalContent,
-                pendingAICard.target,
-                token,
-                log,
-              );
-
-              log?.info?.(`[DingTalk][Dispatcher] AI Card 完成: ${pendingAICard.cardId}`);
-
-              // 清理状态
-              pendingAICard = null;
-              aiCardContent = '';
-            } else {
-              log?.warn?.('[DingTalk][Dispatcher] 没有待处理的卡片，跳过 end');
-            }
-            break;
-          }
-
-          case 'image': {
-            // 图片消息
-            if (item.url) {
-              // 如果有 URL，直接发送
-              await sendProactive(dingtalkConfig, proactiveTarget, item.url, {
-                msgType: 'image',
-                useAICard: false,
-                fallbackToNormal: true,
-                log,
-              });
-            } else if (item.path) {
-              // 如果有本地路径，需要上传
-              const token = await ensureToken();
-              if (token) {
-                // 使用 processLocalImages 处理并获取 media_id
-                const processed = await processLocalImages(`![image](${item.path})`, token, log);
-                // 提取 media_id 并发送
-                const mediaMatch = processed.match(/media_id:(\w+)/);
-                if (mediaMatch) {
-                  await sendProactive(dingtalkConfig, proactiveTarget, mediaMatch[1], {
-                    msgType: 'image',
-                    useAICard: false,
-                    fallbackToNormal: true,
-                    log,
-                  });
-                }
-              }
-            }
-            break;
-          }
-
-          case 'file': {
-            // 文件消息
-            if (item.path) {
-              const token = await ensureToken();
-              if (token) {
-                // 使用 processFileMarkers 处理文件上传
-                const fileMarker = `[file:${item.path}]`;
-                await processFileMarkers(fileMarker, '', dingtalkConfig, token, log, true, aiCardTarget);
-              }
-            }
-            break;
-          }
-
-          case 'audio': {
-            // 音频消息
-            if (item.path) {
-              const token = await ensureToken();
-              if (token) {
-                const audioMarker = `[audio:${item.path}]`;
-                await processAudioMarkers(audioMarker, '', dingtalkConfig, token, log, true, aiCardTarget);
-              }
-            }
-            break;
-          }
-
-          case 'video': {
-            // 视频消息
-            if (item.path) {
-              const token = await ensureToken();
-              if (token) {
-                const videoMarker = `[video:${item.path}]`;
-                await processVideoMarkers(videoMarker, '', dingtalkConfig, token, log, true, aiCardTarget);
-              }
-            }
-            break;
-          }
-
-          case 'error': {
-            // 错误消息
-            const errorText = `⚠️ 错误: ${item.text || '未知错误'}`;
-            await sendProactive(dingtalkConfig, proactiveTarget, errorText, {
-              msgType: 'text',
-              useAICard: false,
-              fallbackToNormal: true,
-              log,
-            });
-            break;
-          }
-
-          default: {
-            // 未知类型，尝试作为文本发送
-            log?.warn?.(`[DingTalk][Dispatcher] 未知消息类型: ${(item as any).type}`);
-            if (item.text) {
-              const processedText = await processTextWithMedia(item.text);
-              await sendProactive(dingtalkConfig, proactiveTarget, processedText, {
-                msgType: 'text',
-                useAICard: false,
-                fallbackToNormal: true,
-                log,
-              });
-            }
-          }
-        }
-      } catch (err: any) {
-        log?.error?.(`[DingTalk][Dispatcher] deliver 失败: ${err?.message || err}`);
-        throw err;
+      if (cardId) {
+        pendingPlainCard = {
+          cardId,
+          cardConfig,
+          target: aiCardTarget,
+        };
+        plainCardContent = '';
+        console.log(`[DingTalk][Dispatcher] Plain card created: ${cardId}`);
+        log?.info?.(`[DingTalk][Dispatcher] 普通卡片创建成功: ${cardId}`);
+        return true;
       }
-    },
+    } else {
+      // 创建 AI Card
+      const cardConfig: AICardConfig = {
+        title: 'AI 助手',
+        content: '',
+      };
 
-    async flush(): Promise<void> {
-      // 如果有未完成的卡片，完成它
+      console.log(`[DingTalk][Dispatcher] Creating AI Card...`);
+      const cardId = await createAICardForTarget(
+        dingtalkConfig,
+        aiCardTarget,
+        cardConfig,
+        token,
+        log,
+      );
+
+      if (cardId) {
+        pendingAICard = {
+          cardId,
+          cardConfig,
+          target: aiCardTarget,
+        };
+        aiCardContent = '';
+        console.log(`[DingTalk][Dispatcher] AI Card created: ${cardId}`);
+        log?.info?.(`[DingTalk][Dispatcher] AI Card 创建成功: ${cardId}`);
+        return true;
+      }
+    }
+
+    console.error('[DingTalk][Dispatcher] Failed to create card');
+    return false;
+  };
+
+  // 更新卡片内容（流式）
+  const updateCard = async (text: string): Promise<void> => {
+    console.log(`[DingTalk][Dispatcher] updateCard called, text length: ${text?.length || 0}, usePlainCard: ${usePlainCard}, pendingAICard: ${!!pendingAICard}, pendingPlainCard: ${!!pendingPlainCard}`);
+    if (usePlainCard && pendingPlainCard) {
+      // 普通卡片：只累积内容，不流式更新
+      plainCardContent += text;
+      console.log(`[DingTalk][Dispatcher] Plain card content updated, length: ${plainCardContent.length}`);
+    } else if (pendingAICard) {
+      // AI Card：累积内容并流式更新
       const token = await ensureToken();
-      if (!token) return;
+      if (!token) {
+        console.error('[DingTalk][Dispatcher] Cannot get token for updateCard');
+        return;
+      }
 
-      if (usePlainCard && pendingPlainCard) {
+      aiCardContent += text;
+      console.log(`[DingTalk][Dispatcher] Streaming AI Card update, cardId: ${pendingAICard.cardId}, content length: ${aiCardContent.length}`);
+
+      await streamAICard(
+        dingtalkConfig,
+        pendingAICard.cardId,
+        aiCardContent,
+        pendingAICard.target,
+        token,
+        log,
+      );
+      console.log(`[DingTalk][Dispatcher] AI Card stream update completed`);
+    } else {
+      console.warn(`[DingTalk][Dispatcher] No pending card to update. usePlainCard=${usePlainCard}, pendingAICard=${!!pendingAICard}, pendingPlainCard=${!!pendingPlainCard}`);
+    }
+  };
+
+  // 完成卡片
+  const finishCard = async (): Promise<void> => {
+    console.log(`[DingTalk][Dispatcher] finishCard called, usePlainCard=${usePlainCard}, pendingAICard=${!!pendingAICard}, pendingPlainCard=${!!pendingPlainCard}`);
+    const token = await ensureToken();
+    if (!token) {
+      console.error('[DingTalk][Dispatcher] Cannot get token for finishCard');
+      return;
+    }
+
+    if (usePlainCard && pendingPlainCard) {
+      // 后处理最终内容
+      const finalContent = await processTextWithMedia(plainCardContent);
+      console.log(`[DingTalk][Dispatcher] Finishing plain card: ${pendingPlainCard.cardId}`);
+
+      // 完成普通卡片
+      await finishPlainCard(
+        dingtalkConfig,
+        pendingPlainCard.cardId,
+        finalContent,
+        pendingPlainCard.target,
+        token,
+        log,
+      );
+
+      console.log(`[DingTalk][Dispatcher] Plain card finished: ${pendingPlainCard.cardId}`);
+      log?.info?.(`[DingTalk][Dispatcher] 普通卡片完成: ${pendingPlainCard.cardId}`);
+
+      // 清理状态
+      pendingPlainCard = null;
+      plainCardContent = '';
+    } else if (pendingAICard) {
+      // 后处理最终内容
+      const finalContent = await processTextWithMedia(aiCardContent);
+      console.log(`[DingTalk][Dispatcher] Finishing AI Card: ${pendingAICard.cardId}`);
+
+      // 完成 AI Card
+      await finishAICard(
+        dingtalkConfig,
+        pendingAICard.cardId,
+        finalContent,
+        pendingAICard.target,
+        token,
+        log,
+      );
+
+      console.log(`[DingTalk][Dispatcher] AI Card finished: ${pendingAICard.cardId}`);
+      log?.info?.(`[DingTalk][Dispatcher] AI Card 完成: ${pendingAICard.cardId}`);
+
+      // 清理状态
+      pendingAICard = null;
+      aiCardContent = '';
+    } else {
+      console.warn('[DingTalk][Dispatcher] No pending card to finish');
+    }
+  };
+
+  // 发送普通文本消息（降级方案）
+  const sendTextReply = async (text: string): Promise<void> => {
+    const proactiveTarget = buildProactiveTarget();
+    const processedText = await processTextWithMedia(text);
+
+    await sendProactive(dingtalkConfig, proactiveTarget, processedText, {
+      msgType: 'text',
+      useAICard: false,
+      fallbackToNormal: true,
+      log,
+    });
+  };
+
+  // 创建 dispatcher 对象
+  const dispatcher: ReplyDispatcher = {
+    sendToolResult: (payload: ReplyPayload): boolean => {
+      const text = payload.text?.slice(0, 50);
+      console.log(`[DingTalk][Dispatcher] Tool result: ${text}`);
+      log?.debug?.(`[DingTalk][Dispatcher] Tool result: ${text}`);
+      // 工具结果不发送到用户，只记录日志
+      return true;
+    },
+
+    sendBlockReply: (payload: ReplyPayload): boolean => {
+      isIdle = false;
+      console.log(`[DingTalk][Dispatcher] sendBlockReply called: ${payload.text?.slice(0, 50)}...`);
+
+      // 异步处理流式块
+      (async () => {
         try {
-          const finalContent = await processTextWithMedia(plainCardContent);
-          await finishPlainCard(
-            dingtalkConfig,
-            pendingPlainCard.cardId,
-            finalContent,
-            pendingPlainCard.target,
-            token,
-            log,
-          );
-          log?.info?.(`[DingTalk][Dispatcher] flush 完成普通卡片: ${pendingPlainCard.cardId}`);
+          // 如果没有待处理的卡片，初始化一个
+          if (!pendingAICard && !pendingPlainCard) {
+            console.log(`[DingTalk][Dispatcher] No pending card, initializing...`);
+            const created = await initCard();
+            if (!created) {
+              // 卡片创建失败，降级为普通消息
+              console.log(`[DingTalk][Dispatcher] Card init failed, falling back to text`);
+              await sendTextReply(payload.text || '');
+              return;
+            }
+          }
+
+          // 更新卡片内容
+          if (payload.text) {
+            await updateCard(payload.text);
+          }
         } catch (err: any) {
-          log?.error?.(`[DingTalk][Dispatcher] flush 失败: ${err?.message || err}`);
-        } finally {
-          pendingPlainCard = null;
-          plainCardContent = '';
+          console.error(`[DingTalk][Dispatcher] sendBlockReply failed: ${err?.message || err}`);
+          log?.error?.(`[DingTalk][Dispatcher] sendBlockReply 失败: ${err?.message || err}`);
         }
-      } else if (pendingAICard) {
+      })();
+
+      return true;
+    },
+
+    sendFinalReply: (payload: ReplyPayload): boolean => {
+      isIdle = false;
+      console.log(`[DingTalk][Dispatcher] sendFinalReply called: ${payload.text?.slice(0, 50)}...`);
+
+      // 异步处理最终回复
+      (async () => {
         try {
-          const finalContent = await processTextWithMedia(aiCardContent);
-          await finishAICard(
-            dingtalkConfig,
-            pendingAICard.cardId,
-            finalContent,
-            pendingAICard.target,
-            token,
-            log,
-          );
-          log?.info?.(`[DingTalk][Dispatcher] flush 完成 AI Card: ${pendingAICard.cardId}`);
+          // 如果没有待处理的卡片，初始化一个
+          if (!pendingAICard && !pendingPlainCard) {
+            console.log(`[DingTalk][Dispatcher] No pending card, initializing...`);
+            const created = await initCard();
+            if (!created) {
+              // 卡片创建失败，降级为普通消息
+              console.log(`[DingTalk][Dispatcher] Card init failed, falling back to text`);
+              await sendTextReply(payload.text || '');
+              isIdle = true;
+              return;
+            }
+          }
+
+          // 如果有文本内容，更新卡片
+          if (payload.text) {
+            await updateCard(payload.text);
+          }
+
+          // 完成卡片
+          await finishCard();
         } catch (err: any) {
-          log?.error?.(`[DingTalk][Dispatcher] flush 失败: ${err?.message || err}`);
+          console.error(`[DingTalk][Dispatcher] sendFinalReply failed: ${err?.message || err}`);
+          log?.error?.(`[DingTalk][Dispatcher] sendFinalReply 失败: ${err?.message || err}`);
         } finally {
-          pendingAICard = null;
-          aiCardContent = '';
+          isIdle = true;
         }
+      })();
+
+      return true;
+    },
+
+    waitForIdle: async (): Promise<void> => {
+      // 等待所有异步操作完成
+      let attempts = 0;
+      while ((!isIdle || pendingAICard || pendingPlainCard) && attempts < 50) {
+        await new Promise(resolve => setTimeout(resolve, 100));
+        attempts++;
       }
     },
 
-    isIdle(): boolean {
-      return isIdle && !pendingAICard && !pendingPlainCard;
+    getQueuedCounts: (): Record<'tool' | 'block' | 'final', number> => {
+      return { tool: 0, block: 0, final: 0 };
+    },
+
+    markComplete: (): void => {
+      log?.debug?.('[DingTalk][Dispatcher] markComplete called');
+      // 确保所有卡片都被完成
+      if (pendingAICard || pendingPlainCard) {
+        finishCard().catch((err: any) => {
+          log?.error?.(`[DingTalk][Dispatcher] markComplete 完成卡片失败: ${err?.message || err}`);
+        });
+      }
     },
   };
 
-  // 构建 replyOptions
-  const replyOptions: ReplyDispatcherOptions = {
+  // 构建 replyOptions - 使用 GetReplyOptions 类型
+  const replyOptions: Omit<GetReplyOptions, 'onToolResult' | 'onBlockReply'> = {
     // 钉钉支持 Markdown
     supportsMarkdown: true,
     // 支持 AI Card
@@ -461,7 +384,6 @@ export function createDingtalkReplyDispatcher(
     supportsStreaming: true,
     // 最大消息长度
     maxMessageLength: 20000,
-    // 其他选项...
   };
 
   return {

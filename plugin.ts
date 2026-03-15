@@ -10,7 +10,7 @@ import axios from 'axios';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
-import type { ClawdbotPluginApi, PluginRuntime, ClawdbotConfig } from 'clawdbot/plugin-sdk';
+import type { OpenClawPluginApi, PluginRuntime, OpenClawConfig } from 'openclaw/plugin-sdk';
 import { createDingtalkReplyDispatcher } from './src/reply-dispatcher';
 
 // ============ 常量 ============
@@ -199,11 +199,11 @@ async function getAccessToken(config: any): Promise<string> {
 
 // ============ 配置工具 ============
 
-function getConfig(cfg: ClawdbotConfig) {
+function getConfig(cfg: OpenClawConfig) {
   return (cfg?.channels as any)?.['dingtalk-connector'] || {};
 }
 
-function isConfigured(cfg: ClawdbotConfig): boolean {
+function isConfigured(cfg: OpenClawConfig): boolean {
   const config = getConfig(cfg);
   return Boolean(config.clientId && config.clientSecret);
 }
@@ -2481,7 +2481,7 @@ async function recallEmotionReply(config: any, data: any, log?: any): Promise<vo
 // ============ 核心消息处理 (AI Card Streaming) ============
 
 async function handleDingTalkMessage(params: {
-  cfg: ClawdbotConfig;
+  cfg: OpenClawConfig;
   accountId: string;
   data: any;
   sessionWebhook: string;
@@ -2759,6 +2759,9 @@ async function handleDingTalkMessage(params: {
     });
 
     log?.info?.(`[DingTalk] Dispatch complete (queuedFinal=${queuedFinal}, replies=${counts.final})`);
+  } catch (err: any) {
+    log?.error?.(`[DingTalk] Dispatch error: ${err?.message || err}`);
+    throw err;
   } finally {
     // ===== 撤回处理中表情 =====
     await recallEmotionReply(dingtalkConfig, data, log);
@@ -3128,14 +3131,14 @@ const dingtalkPlugin = {
     },
   },
   config: {
-    listAccountIds: (cfg: ClawdbotConfig) => {
+    listAccountIds: (cfg: OpenClawConfig) => {
       const config = getConfig(cfg);
       // __default__ 是内部标记，表示使用顶层配置（单账号模式）
       return config.accounts
         ? Object.keys(config.accounts)
         : (isConfigured(cfg) ? ['__default__'] : []);
     },
-    resolveAccount: (cfg: ClawdbotConfig, accountId?: string) => {
+    resolveAccount: (cfg: OpenClawConfig, accountId?: string) => {
       const config = getConfig(cfg);
       const id = accountId || DEFAULT_ACCOUNT_ID;
       if (config.accounts?.[id]) {
@@ -3417,7 +3420,7 @@ const plugin = {
     additionalProperties: true,
     properties: { enabled: { type: 'boolean', default: true } },
   },
-  register(api: ClawdbotPluginApi) {
+  register(api: OpenClawPluginApi) {
     runtime = api.runtime;
     api.registerChannel({ plugin: dingtalkPlugin });
 
@@ -3770,7 +3773,6 @@ export const __testables = {
   buildDeliverBody,
   buildMsgPayload,
   // AI Card
-  createAICard,
   streamAICard,
   finishAICard,
   createAICardForTarget,
