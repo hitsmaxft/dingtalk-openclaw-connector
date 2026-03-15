@@ -1,10 +1,21 @@
 import axios from 'axios';
 import type { DingTalkConfig } from '../plugin';
 
-export interface AICardConfig {
-  title: string;
-  content: string;
-}
+// ============ Constants ============
+
+const DINGTALK_API = 'https://api.dingtalk.com';
+const AI_CARD_TEMPLATE_ID = '02fcf2f4-5e02-4a85-b672-46d1f715543e.schema';
+
+// flowStatus values consistent with Python SDK AICardStatus
+const AICardStatus = {
+  PROCESSING: '1',
+  INPUTING: '2',
+  FINISHED: '3',
+  EXECUTING: '4',
+  FAILED: '5',
+} as const;
+
+// ============ Types ============
 
 export interface AICardTarget {
   type: 'user' | 'group';
@@ -12,281 +23,259 @@ export interface AICardTarget {
   openConversationId?: string;
 }
 
-/**
- * 为指定目标创建 AI Card
- */
-export async function createAICardForTarget(
-  cfg: DingTalkConfig,
-  target: AICardTarget,
-  cardConfig: AICardConfig,
-  token: string,
-  log?: any,
-): Promise<string | null> {
-  const templateId = cfg.aiCardTemplateId || '02fcf2f4-5e02-4a85-b672-46d1f715543e.schema';
-  console.log(`[DingTalk][createAICardForTarget] Starting, target=${JSON.stringify(target)}, templateId=${templateId}`);
-  try {
-    const resp = await axios.post(
-      'https://api.dingtalk.com/v1.0/im/interactiveCards/instances',
-      {
-        cardTemplateId: templateId,
-        openConversationId: target.openConversationId,
-        singleChatReceiver: target.userId ? { userId: target.userId } : undefined,
-        cardData: JSON.stringify({
-          title: cardConfig.title,
-          content: cardConfig.content,
-        }),
-      },
-      {
-        headers: {
-          'x-acs-dingtalk-access-token': token,
-          'Content-Type': 'application/json',
-        },
-      },
-    );
-
-    // 钉钉 API 可能返回不同的响应格式
-    const cardId = resp.data?.cardInstanceId || resp.data?.result?.cardInstanceId;
-    if (cardId) {
-      console.log(`[DingTalk][createAICardForTarget] AI Card created successfully: ${cardId}`);
-      log?.info?.(`[DingTalk][createAICardForTarget] AI Card 创建成功: ${cardId}`);
-      return cardId;
-    }
-
-    console.error(`[DingTalk][createAICardForTarget] Failed to create AI Card: ${JSON.stringify(resp.data)}`);
-    log?.error?.(`[DingTalk][createAICardForTarget] 创建失败: ${JSON.stringify(resp.data)}`);
-    return null;
-  } catch (err: any) {
-    console.error(`[DingTalk][createAICardForTarget] Error: ${err?.message || err}`);
-    log?.error?.(`[DingTalk][createAICardForTarget] 错误: ${err?.message || err}`);
-    return null;
-  }
-}
-
-/**
- * 流式更新 AI Card
- */
-export async function streamAICard(
-  cfg: DingTalkConfig,
-  cardId: string,
-  content: string,
-  target: AICardTarget,
-  token: string,
-  log?: any,
-): Promise<void> {
-  console.log(`[DingTalk][streamAICard] Updating AI Card: ${cardId}, content length: ${content?.length || 0}`);
-  try {
-    await axios.put(
-      `https://api.dingtalk.com/v1.0/im/interactiveCards/instances/${cardId}`,
-      {
-        cardData: JSON.stringify({
-          content,
-        }),
-      },
-      {
-        headers: {
-          'x-acs-dingtalk-access-token': token,
-          'Content-Type': 'application/json',
-        },
-      },
-    );
-
-    console.log(`[DingTalk][streamAICard] AI Card updated successfully: ${cardId}`);
-    log?.debug?.(`[DingTalk][streamAICard] AI Card 更新成功: ${cardId}`);
-  } catch (err: any) {
-    console.error(`[DingTalk][streamAICard] Failed to update AI Card: ${err?.message || err}`);
-    log?.error?.(`[DingTalk][streamAICard] 更新失败: ${err?.message || err}`);
-  }
-}
-
-/**
- * 完成 AI Card
- */
-export async function finishAICard(
-  cfg: DingTalkConfig,
-  cardId: string,
-  content: string,
-  target: AICardTarget,
-  token: string,
-  log?: any,
-): Promise<void> {
-  console.log(`[DingTalk][finishAICard] Finishing AI Card: ${cardId}, content length: ${content?.length || 0}`);
-  try {
-    await axios.put(
-      `https://api.dingtalk.com/v1.0/im/interactiveCards/instances/${cardId}`,
-      {
-        cardData: JSON.stringify({
-          content,
-          finished: true,
-        }),
-      },
-      {
-        headers: {
-          'x-acs-dingtalk-access-token': token,
-          'Content-Type': 'application/json',
-        },
-      },
-    );
-
-    console.log(`[DingTalk][finishAICard] AI Card finished successfully: ${cardId}`);
-    log?.info?.(`[DingTalk][finishAICard] AI Card 完成: ${cardId}`);
-  } catch (err: any) {
-    console.error(`[DingTalk][finishAICard] Failed to finish AI Card: ${err?.message || err}`);
-    log?.error?.(`[DingTalk][finishAICard] 完成失败: ${err?.message || err}`);
-  }
-}
-
-/**
- * 内部发送 AI Card
- */
-export async function sendAICardInternal(
-  cfg: DingTalkConfig,
-  target: AICardTarget,
-  content: string,
-  token: string,
-  log?: any,
-): Promise<void> {
-  try {
-    const cardId = await createAICardForTarget(
-      cfg,
-      target,
-      { title: 'AI 助手', content },
-      token,
-      log,
-    );
-
-    if (cardId) {
-      await finishAICard(cfg, cardId, content, target, token, log);
-    }
-  } catch (err: any) {
-    log?.error?.(`[DingTalk][sendAICardInternal] 发送失败: ${err?.message || err}`);
-  }
-}
-
-// ============ 普通卡片支持 ============
-
-export interface PlainCardConfig {
-  title: string;
-  content: string;
-}
-
-export interface PlainCardInstance {
+export interface AICardInstance {
   cardInstanceId: string;
   accessToken: string;
+  inputingStarted: boolean;
+}
+
+// ============ Helper Functions ============
+
+/**
+ * Get access token from DingTalk
+ */
+async function getAccessToken(config: DingTalkConfig): Promise<string> {
+  const resp = await axios.post(
+    `${DINGTALK_API}/v1.0/oauth2/accessToken`,
+    {
+      appKey: config.clientId,
+      appSecret: config.clientSecret,
+    },
+    {
+      headers: { 'Content-Type': 'application/json' },
+    },
+  );
+
+  if (!resp.data?.accessToken) {
+    throw new Error(`Failed to get access token: ${JSON.stringify(resp.data)}`);
+  }
+
+  return resp.data.accessToken;
 }
 
 /**
- * 创建普通卡片（非 AI Card）
- * 使用标准 Markdown 卡片模板
+ * Build deliver body for card delivery
  */
-export async function createPlainCard(
-  cfg: DingTalkConfig,
+function buildDeliverBody(
+  cardInstanceId: string,
   target: AICardTarget,
-  cardConfig: PlainCardConfig,
-  token: string,
-  log?: any,
-): Promise<string | null> {
-  try {
-    // 普通卡片使用不同的模板 ID，例如标准 Markdown 卡片
-    const templateId = cfg.plainCardTemplateId || 'StandardMarkdownCard';
+  robotCode: string,
+): any {
+  const base = { outTrackId: cardInstanceId, userIdType: 1 };
 
-    const resp = await axios.post(
-      'https://api.dingtalk.com/v1.0/im/interactiveCards/instances',
-      {
-        cardTemplateId: templateId,
-        openConversationId: target.openConversationId,
-        singleChatReceiver: target.userId ? { userId: target.userId } : undefined,
-        cardData: JSON.stringify({
-          title: cardConfig.title,
-          content: cardConfig.content,
-        }),
-        // 普通卡片不需要流式状态更新
-        cardBizType: 0,
-      },
-      {
-        headers: {
-          'x-acs-dingtalk-access-token': token,
-          'Content-Type': 'application/json',
-        },
-      },
-    );
+  if (target.type === 'group') {
+    return {
+      ...base,
+      openSpaceId: `dtv1.card//IM_GROUP.${target.openConversationId}`,
+      imGroupOpenDeliverModel: { robotCode },
+    };
+  }
 
-    if (resp.data?.success && resp.data?.result?.cardInstanceId) {
-      const cardId = resp.data.result.cardInstanceId;
-      log?.info?.(`[DingTalk][createPlainCard] 普通卡片创建成功: ${cardId}`);
-      return cardId;
+  return {
+    ...base,
+    openSpaceId: `dtv1.card//IM_ROBOT.${target.userId}`,
+    imRobotOpenDeliverModel: { spaceType: 'IM_ROBOT', robotCode },
+  };
+}
+
+/**
+ * Ensure Markdown tables have blank lines before them for proper rendering in DingTalk
+ */
+function ensureTableBlankLines(text: string): string {
+  const lines = text.split('\n');
+  const result: string[] = [];
+  const tableRowRegex = /^\s*\|/;
+  const isDivider = (line: string) => /^\s*\|[-:|\s]+\|\s*$/.test(line);
+
+  for (let i = 0; i < lines.length; i++) {
+    const currentLine = lines[i];
+    const nextLine = lines[i + 1] ?? '';
+
+    if (
+      tableRowRegex.test(currentLine) &&
+      isDivider(nextLine) &&
+      i > 0 && lines[i - 1].trim() !== '' && !tableRowRegex.test(lines[i - 1])
+    ) {
+      result.push('');
     }
 
-    log?.error?.(`[DingTalk][createPlainCard] 创建失败: ${JSON.stringify(resp.data)}`);
-    return null;
+    result.push(currentLine);
+  }
+  return result.join('\n');
+}
+
+// ============ AI Card Functions ============
+
+/**
+ * Create AI Card for target
+ * Uses the correct API: POST /v1.0/card/instances + POST /v1.0/card/instances/deliver
+ */
+export async function createAICardForTarget(
+  config: DingTalkConfig,
+  target: AICardTarget,
+  log?: any,
+): Promise<AICardInstance | null> {
+  const targetDesc = target.type === 'group'
+    ? `group ${target.openConversationId}`
+    : `user ${target.userId}`;
+
+  try {
+    const token = await getAccessToken(config);
+    const cardInstanceId = `card_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+
+    log?.info?.(`[DingTalk][AICard] Creating card: ${targetDesc}, outTrackId=${cardInstanceId}`);
+
+    // 1. Create card instance
+    const createBody = {
+      cardTemplateId: AI_CARD_TEMPLATE_ID,
+      outTrackId: cardInstanceId,
+      cardData: { cardParamMap: {} },
+      callbackType: 'STREAM',
+      imGroupOpenSpaceModel: { supportForward: true },
+      imRobotOpenSpaceModel: { supportForward: true },
+    };
+
+    log?.info?.(`[DingTalk][AICard] POST /v1.0/card/instances`);
+    const createResp = await axios.post(`${DINGTALK_API}/v1.0/card/instances`, createBody, {
+      headers: { 'x-acs-dingtalk-access-token': token, 'Content-Type': 'application/json' },
+    });
+    log?.info?.(`[DingTalk][AICard] Create response: status=${createResp.status}`);
+
+    // 2. Deliver card
+    const deliverBody = buildDeliverBody(cardInstanceId, target, config.clientId);
+
+    log?.info?.(`[DingTalk][AICard] POST /v1.0/card/instances/deliver body=${JSON.stringify(deliverBody)}`);
+    const deliverResp = await axios.post(`${DINGTALK_API}/v1.0/card/instances/deliver`, deliverBody, {
+      headers: { 'x-acs-dingtalk-access-token': token, 'Content-Type': 'application/json' },
+    });
+    log?.info?.(`[DingTalk][AICard] Deliver response: status=${deliverResp.status}`);
+
+    return { cardInstanceId, accessToken: token, inputingStarted: false };
   } catch (err: any) {
-    log?.error?.(`[DingTalk][createPlainCard] 错误: ${err?.message || err}`);
+    log?.error?.(`[DingTalk][AICard] Failed to create card (${targetDesc}): ${err.message}`);
+    if (err.response) {
+      log?.error?.(`[DingTalk][AICard] Error response: status=${err.response.status} data=${JSON.stringify(err.response.data)}`);
+    }
     return null;
   }
 }
 
 /**
- * 更新普通卡片内容
+ * Stream update AI Card content
+ * Uses the correct API: PUT /v1.0/card/streaming
  */
-export async function updatePlainCard(
-  cfg: DingTalkConfig,
-  cardId: string,
+export async function streamAICard(
+  card: AICardInstance,
   content: string,
-  target: AICardTarget,
-  token: string,
+  finished: boolean = false,
   log?: any,
 ): Promise<void> {
-  try {
-    await axios.put(
-      `https://api.dingtalk.com/v1.0/im/interactiveCards/instances/${cardId}`,
-      {
-        cardData: JSON.stringify({
-          content,
-        }),
-      },
-      {
-        headers: {
-          'x-acs-dingtalk-access-token': token,
-          'Content-Type': 'application/json',
+  // First streaming call - switch to INPUTING state
+  if (!card.inputingStarted) {
+    const statusBody = {
+      outTrackId: card.cardInstanceId,
+      cardData: {
+        cardParamMap: {
+          flowStatus: AICardStatus.INPUTING,
+          msgContent: '',
+          staticMsgContent: '',
+          sys_full_json_obj: JSON.stringify({
+            order: ['msgContent'],
+          }),
         },
       },
-    );
+    };
 
-    log?.debug?.(`[DingTalk][updatePlainCard] 普通卡片更新成功: ${cardId}`);
+    log?.info?.(`[DingTalk][AICard] PUT /v1.0/card/instances (INPUTING) outTrackId=${card.cardInstanceId}`);
+    try {
+      const statusResp = await axios.put(`${DINGTALK_API}/v1.0/card/instances`, statusBody, {
+        headers: { 'x-acs-dingtalk-access-token': card.accessToken, 'Content-Type': 'application/json' },
+      });
+      log?.info?.(`[DingTalk][AICard] INPUTING response: status=${statusResp.status}`);
+    } catch (err: any) {
+      log?.error?.(`[DingTalk][AICard] INPUTING switch failed: ${err.message}, resp=${JSON.stringify(err.response?.data)}`);
+      throw err;
+    }
+    card.inputingStarted = true;
+  }
+
+  // Call streaming API to update content
+  const fixedContent = ensureTableBlankLines(content);
+  const body = {
+    outTrackId: card.cardInstanceId,
+    guid: `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+    key: 'msgContent',
+    content: fixedContent,
+    isFull: true,  // Full replacement
+    isFinalize: finished,
+    isError: false,
+  };
+
+  log?.info?.(`[DingTalk][AICard] PUT /v1.0/card/streaming contentLen=${content.length} isFinalize=${finished} guid=${body.guid}`);
+  try {
+    const streamResp = await axios.put(`${DINGTALK_API}/v1.0/card/streaming`, body, {
+      headers: { 'x-acs-dingtalk-access-token': card.accessToken, 'Content-Type': 'application/json' },
+    });
+    log?.info?.(`[DingTalk][AICard] Streaming response: status=${streamResp.status}`);
   } catch (err: any) {
-    log?.error?.(`[DingTalk][updatePlainCard] 更新失败: ${err?.message || err}`);
+    log?.error?.(`[DingTalk][AICard] Streaming update failed: ${err.message}, resp=${JSON.stringify(err.response?.data)}`);
+    throw err;
   }
 }
 
 /**
- * 完成普通卡片
+ * Finish AI Card
+ * 1. Close streaming channel with final content (isFinalize=true)
+ * 2. Update card status to FINISHED
  */
-export async function finishPlainCard(
-  cfg: DingTalkConfig,
-  cardId: string,
+export async function finishAICard(
+  card: AICardInstance,
   content: string,
-  target: AICardTarget,
-  token: string,
   log?: any,
 ): Promise<void> {
-  try {
-    await axios.put(
-      `https://api.dingtalk.com/v1.0/im/interactiveCards/instances/${cardId}`,
-      {
-        cardData: JSON.stringify({
-          content,
-          finished: true,
+  const fixedContent = ensureTableBlankLines(content);
+  log?.info?.(`[DingTalk][AICard] Finishing card, final content length=${fixedContent.length}`);
+
+  // 1. Close streaming channel with final content
+  await streamAICard(card, fixedContent, true, log);
+
+  // 2. Update card status to FINISHED
+  const body = {
+    outTrackId: card.cardInstanceId,
+    cardData: {
+      cardParamMap: {
+        flowStatus: AICardStatus.FINISHED,
+        msgContent: fixedContent,
+        staticMsgContent: '',
+        sys_full_json_obj: JSON.stringify({
+          order: ['msgContent'],
         }),
       },
-      {
-        headers: {
-          'x-acs-dingtalk-access-token': token,
-          'Content-Type': 'application/json',
-        },
-      },
-    );
+    },
+  };
 
-    log?.info?.(`[DingTalk][finishPlainCard] 普通卡片完成: ${cardId}`);
+  log?.info?.(`[DingTalk][AICard] PUT /v1.0/card/instances (FINISHED) outTrackId=${card.cardInstanceId}`);
+  try {
+    const finishResp = await axios.put(`${DINGTALK_API}/v1.0/card/instances`, body, {
+      headers: { 'x-acs-dingtalk-access-token': card.accessToken, 'Content-Type': 'application/json' },
+    });
+    log?.info?.(`[DingTalk][AICard] FINISHED response: status=${finishResp.status}`);
   } catch (err: any) {
-    log?.error?.(`[DingTalk][finishPlainCard] 完成失败: ${err?.message || err}`);
+    log?.error?.(`[DingTalk][AICard] FINISHED update failed: ${err.message}, resp=${JSON.stringify(err.response?.data)}`);
+  }
+}
+
+/**
+ * Send AI Card internally (non-streaming, for simple replies)
+ */
+export async function sendAICardInternal(
+  config: DingTalkConfig,
+  target: AICardTarget,
+  content: string,
+  log?: any,
+): Promise<void> {
+  const card = await createAICardForTarget(config, target, log);
+  if (card) {
+    await finishAICard(card, content, log);
   }
 }

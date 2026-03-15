@@ -4,7 +4,6 @@
  * 通过钉钉 Stream 模式连接，支持 AI Card 流式响应。
  * 完整接入 Moltbot 消息处理管道。
  *
- * VERSION: 2026-03-15-01 - Force reload for AI Card streaming fix
  */
 
 import { DWClient, TOPIC_ROBOT } from 'dingtalk-stream';
@@ -1306,7 +1305,7 @@ function resolveAgentIdByBindings(
   peerId: string,
   log?: any,
 ): string {
-  const rt = getRuntime();
+  const rt:PluginRuntime = getRuntime();
   const defaultAgentId = accountId === DEFAULT_ACCOUNT_ID ? 'main' : accountId;
 
   // 读取 OpenClaw 配置
@@ -2721,7 +2720,7 @@ async function handleDingTalkMessage(params: {
 
   try {
     // ===== 使用 OpenClaw 标准消息分发机制 =====
-    const rt = getRuntime();
+    const rt:PluginRuntime = getRuntime();
     const route = rt.channel.routing.resolveAgentRoute({
       cfg,
       channel: 'dingtalk-connector',
@@ -2746,6 +2745,7 @@ async function handleDingTalkMessage(params: {
     });
 
     // 使用 dispatchReplyFromConfig 处理消息（会自动处理命令）
+    log?.info?.(`[DingTalk] replyOptions: supportsStreaming=${replyOptions.supportsStreaming}, has onPartialReply=${!!replyOptions.onPartialReply}, disableBlockStreaming=${replyOptions.disableBlockStreaming}`);
     const { queuedFinal, counts } = await rt.channel.reply.withReplyDispatcher({
       dispatcher,
       onSettled: () => {
