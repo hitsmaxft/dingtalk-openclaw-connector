@@ -53,15 +53,27 @@ describe('core functionality', () => {
       expect(normalizeSlashCommand('/clear')).toBe('/new');
       expect(normalizeSlashCommand('新会话')).toBe('/new');
       expect(normalizeSlashCommand('重新开始')).toBe('/new');
+      expect(normalizeSlashCommand(' /new')).toBe('/new');
+      expect(normalizeSlashCommand('  新会话')).toBe('/new');
+    });
+
+    it('should trim left for slash commands', async () => {
+      const { __testables } = await import('../../plugin');
+      const { normalizeSlashCommand } = __testables as any;
+
+      expect(normalizeSlashCommand('/help')).toBe('/help');
+      expect(normalizeSlashCommand(' /help')).toBe('/help');
+      expect(normalizeSlashCommand('  /version')).toBe('/version');
+      expect(normalizeSlashCommand('   /new /reset')).toBe('/new /reset');
     });
 
     it('should return original text for non-command text', async () => {
       const { __testables } = await import('../../plugin');
       const { normalizeSlashCommand } = __testables as any;
 
-      expect(normalizeSlashCommand('/help')).toBe('/help');
       expect(normalizeSlashCommand('hello')).toBe('hello');
       expect(normalizeSlashCommand('some text')).toBe('some text');
+      expect(normalizeSlashCommand('   hello')).toBe('hello');
     });
   });
 

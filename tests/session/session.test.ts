@@ -18,9 +18,9 @@ describe('session management helpers', () => {
   describe('normalizeSlashCommand', () => {
     it.each([
       ['', ''],
-      ['   ', '   '], // 非命令返回原文，不强制 trim 成空
+      ['   ', ''],
       ['/new', '/new'],
-      [' /new ', '/new'],
+      [' /new', '/new'],
       ['/NEW', '/new'],
       ['/New', '/new'],
       ['/reset', '/new'],
@@ -28,12 +28,15 @@ describe('session management helpers', () => {
       ['新会话', '/new'],
       ['重新开始', '/new'],
       ['清空对话', '/new'],
-      ['  新会话  ', '/new'],
+      ['  新会话', '/new'],
       ['hello', 'hello'],
-      [' /not-a-command ', ' /not-a-command '],
+      [' /not-a-command ', '/not-a-command '],
       ['/new session', '/new session'],
       ['new', 'new'],
       ['新会话xxx', '新会话xxx'],
+      ['/help', '/help'],
+      [' /help ', '/help '],
+      ['  /new /reset', '/new /reset'],
     ] as const)('"%s" -> "%s"', (input, expected) => {
       expect(normalizeSlashCommand(input)).toBe(expected);
     });
