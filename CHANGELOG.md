@@ -6,6 +6,22 @@
 This document records all significant changes. The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and version numbers follow [Semantic Versioning](https://semver.org/).
 
+## [0.7.9] - 2026-03-13
+
+### 新增 / Added
+- ✨ **应用层心跳机制** - 钉钉 Stream 客户端使用自定义心跳（WebSocket ping/pong，30 秒间隔、90 秒超时），超时后主动断开并重连，重连失败 5 秒后重试  
+  **Application-layer heartbeat** - Stream client uses custom ping/pong heartbeat (30s interval, 90s timeout), reconnects on timeout with 5s retry on failure
+- ✨ **统一停止与清理** - 停止客户端时通过 `doStop` 统一清理心跳定时器并调用 `client.disconnect()`，确保连接正确关闭  
+  **Unified stop & cleanup** - `doStop` clears heartbeat timer and calls `client.disconnect()` when stopping the client
+
+### 修复 / Fixes
+- 🐛 **长连接静默断开** - 关闭 SDK 激进 keepAlive（8 秒超时），改用应用层心跳，减少因长时间无数据导致的静默断连且无法恢复  
+  **Long-lived connection silent disconnect** - Disabled SDK aggressive keepAlive (8s timeout), use app-layer heartbeat to reduce silent disconnects when idle
+
+### 改进 / Improvements
+- ✅ **DWClient 配置** - 启用 `autoReconnect: true`，设置 `keepAlive: false`，由应用层心跳替代 SDK 心跳，避免与钉钉服务端策略冲突  
+  **DWClient config** - `autoReconnect: true`, `keepAlive: false`; app-layer heartbeat replaces SDK keepAlive to avoid conflicts with server
+
 ## [0.7.8] - 2026-03-13
 
 ### 修复 / Fixes
