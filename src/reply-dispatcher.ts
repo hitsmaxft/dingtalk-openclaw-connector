@@ -42,6 +42,8 @@ export function createDingtalkReplyDispatcher(
 ): DingtalkReplyDispatcherResult {
   const { cfg, agentId, runtime, dingtalkConfig, data, isDirect, log } = options;
 
+  log?.info?.(`[DingTalk][Dispatcher] createDingtalkReplyDispatcher called, usePlainCard=${dingtalkConfig.usePlainCard}`);
+
   // 获取 access token
   let oapiToken: string | null = null;
 
