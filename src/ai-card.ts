@@ -44,8 +44,9 @@ export async function createAICardForTarget(
       },
     );
 
-    if (resp.data?.success && resp.data?.result?.cardInstanceId) {
-      const cardId = resp.data.result.cardInstanceId;
+    // 钉钉 API 可能返回不同的响应格式
+    const cardId = resp.data?.cardInstanceId || resp.data?.result?.cardInstanceId;
+    if (cardId) {
       console.log(`[DingTalk][createAICardForTarget] AI Card created successfully: ${cardId}`);
       log?.info?.(`[DingTalk][createAICardForTarget] AI Card 创建成功: ${cardId}`);
       return cardId;
