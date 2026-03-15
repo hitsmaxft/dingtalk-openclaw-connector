@@ -2,7 +2,7 @@ import type { ReplyDispatcher, ReplyDispatcherOptions, ReplyItem } from '@opencl
 import type { DingTalkConfig } from '../plugin';
 import {
   createAICardForTarget, finishAICard, streamAICard, sendAICardInternal,
-  createPlainCard, updatePlainCard, finishPlainCard,
+  createPlainCard, finishPlainCard,
   type AICardTarget, type AICardConfig, type PlainCardConfig
 } from './ai-card';
 import { sendProactive, type ProactiveTarget, type SendProactiveOptions } from './send-proactive';
@@ -228,28 +228,17 @@ export function createDingtalkReplyDispatcher(
           }
 
           case 'ai_card_chunk': {
-            // 卡片流式内容块（AI Card 或普通卡片）
-            const token = await ensureToken();
-            if (!token) break;
-
+            // 卡片流式内容块（AI Card 支持流式更新，普通卡片只累积内容）
             if (usePlainCard && pendingPlainCard) {
-              // 累积内容
+              // 普通卡片：只累积内容，不流式更新
               plainCardContent += item.text || '';
-
-              // 流式更新普通卡片
-              await updatePlainCard(
-                dingtalkConfig,
-                pendingPlainCard.cardId,
-                plainCardContent,
-                pendingPlainCard.target,
-                token,
-                log,
-              );
             } else if (pendingAICard) {
-              // 累积内容
+              // AI Card：累积内容并流式更新
+              const token = await ensureToken();
+              if (!token) break;
+
               aiCardContent += item.text || '';
 
-              // 流式更新 AI Card
               await streamAICard(
                 dingtalkConfig,
                 pendingAICard.cardId,
