@@ -3963,7 +3963,7 @@ const plugin = {
       respond(true, { docs });
     });
 
-    api.logger?.info('[DingTalk] 插件已注册（支持主动发送 AI Card 消息、文档读写）');
+    api.logger?.debug('[DingTalk] 插件已注册（支持主动发送 AI Card 消息、文档读写）');
   },
 };
 
