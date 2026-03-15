@@ -96,8 +96,8 @@ openclaw plugins install -l .
       "separateSessionByConversation": true,  // 可选：是否按单聊/群聊/群区分 session（默认：true）
       "groupSessionScope": "group",       // 可选：群聊会话隔离策略，group=群共享，group_sender=群内用户独立（默认：group）
       "sharedMemoryAcrossConversations": false, // 可选：是否在不同会话间共享记忆；false 时群聊与私聊、不同群记忆隔离（默认：false）
-      "asyncMode": false,                 // 可选：异步模式，立即回执用户消息，后台处理并推送结果（默认：false）
-      "ackText": "🫡 任务已接收"      // 可选：异步模式下的回执消息文本（默认：'🫡 任务已接收，处理中...'）
+      "usePlainCard": false,              // 可选：使用普通卡片代替 AI Card 进行流式输出（默认：false）
+      "plainCardTemplateId": "StandardMarkdownCard" // 可选：普通卡片模板 ID（默认：'StandardMarkdownCard'）
     }
   }
 }
@@ -149,8 +149,36 @@ openclaw plugins list  # 确认 dingtalk-connector 已加载
 | `separateSessionByConversation` | — | 是否按单聊/群聊/群区分 session（默认：true） |
 | `groupSessionScope` | — | 群聊会话隔离策略（仅当 separateSessionByConversation=true 时生效）：`group`=群共享，`group_sender`=群内用户独立（默认：group） |
 | `sharedMemoryAcrossConversations` | — | 是否在不同会话间共享记忆；false 时群聊与私聊、不同群记忆隔离（默认：false） |
-| `asyncMode` | — | 异步模式，立即回执用户消息，后台处理并推送结果（默认：false） |
-| `ackText` | — | 异步模式下的回执消息文本（默认：'🫡 任务已接收，处理中...'） |
+| `usePlainCard` | — | 使用普通卡片代替 AI Card 进行流式输出（默认：false） |
+| `plainCardTemplateId` | — | 普通卡片模板 ID（默认：'StandardMarkdownCard'） |
+
+## 普通卡片模式
+
+当 `usePlainCard` 设置为 `true` 时，连接器将使用普通交互卡片代替 AI Card 进行流式输出。
+
+### 普通卡片 vs AI Card
+
+| 特性 | AI Card | 普通卡片 |
+|------|---------|----------|
+| 流式更新 | ✅ 支持实时打字机效果 | ❌ 只在最后一次性更新 |
+| 权限要求 | 需要 `Card.Streaming.Write` 权限 | 标准卡片权限即可 |
+| 适用场景 | 需要实时反馈的场景 | 简单的消息展示场景 |
+
+### 配置示例
+
+```json5
+{
+  "channels": {
+    "dingtalk-connector": {
+      "enabled": true,
+      "clientId": "dingxxxxxxxxx",
+      "clientSecret": "your_secret_here",
+      "usePlainCard": true,                 // 启用普通卡片
+      "plainCardTemplateId": "StandardMarkdownCard"  // 可选：自定义模板
+    }
+  }
+}
+```
 
 ## 会话与记忆隔离
 
