@@ -22,12 +22,13 @@ export async function createAICardForTarget(
   token: string,
   log?: any,
 ): Promise<string | null> {
-  console.log(`[DingTalk][createAICardForTarget] Starting, target=${JSON.stringify(target)}, templateId=${cfg.aiCardTemplateId || 'StandardCard'}`);
+  const templateId = cfg.aiCardTemplateId || '02fcf2f4-5e02-4a85-b672-46d1f715543e.schema';
+  console.log(`[DingTalk][createAICardForTarget] Starting, target=${JSON.stringify(target)}, templateId=${templateId}`);
   try {
     const resp = await axios.post(
       'https://api.dingtalk.com/v1.0/im/interactiveCards/instances',
       {
-        cardTemplateId: cfg.aiCardTemplateId || 'StandardCard',
+        cardTemplateId: templateId,
         openConversationId: target.openConversationId,
         singleChatReceiver: target.userId ? { userId: target.userId } : undefined,
         cardData: JSON.stringify({
