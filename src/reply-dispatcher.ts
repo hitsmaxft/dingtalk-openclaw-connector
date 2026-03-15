@@ -98,16 +98,15 @@ export function createDingtalkReplyDispatcher(
 
   // 初始化卡片（AI Card 或普通卡片）
   const initCard = async (): Promise<boolean> => {
-    console.log(`[DingTalk][Dispatcher] initCard called, usePlainCard=${usePlainCard}`);
+    log?.info?.(`[DingTalk][Dispatcher] initCard called, usePlainCard=${usePlainCard}`);
     const token = await ensureToken();
     if (!token) {
-      console.error('[DingTalk][Dispatcher] Cannot get token, skipping card creation');
-      log?.warn?.('[DingTalk][Dispatcher] 无法获取 token，跳过卡片创建');
+      log?.error?.('[DingTalk][Dispatcher] Cannot get token, skipping card creation');
       return false;
     }
 
     const aiCardTarget = buildAICardTarget();
-    console.log(`[DingTalk][Dispatcher] Building AI Card target: ${JSON.stringify(aiCardTarget)}`);
+    log?.info?.(`[DingTalk][Dispatcher] Building AI Card target: ${JSON.stringify(aiCardTarget)}`);
 
     if (usePlainCard) {
       // 创建普通卡片
@@ -116,7 +115,7 @@ export function createDingtalkReplyDispatcher(
         content: '',
       };
 
-      console.log(`[DingTalk][Dispatcher] Creating plain card...`);
+      log?.info?.(`[DingTalk][Dispatcher] Creating plain card...`);
       const cardId = await createPlainCard(
         dingtalkConfig,
         aiCardTarget,
@@ -132,8 +131,7 @@ export function createDingtalkReplyDispatcher(
           target: aiCardTarget,
         };
         plainCardContent = '';
-        console.log(`[DingTalk][Dispatcher] Plain card created: ${cardId}`);
-        log?.info?.(`[DingTalk][Dispatcher] 普通卡片创建成功: ${cardId}`);
+        log?.info?.(`[DingTalk][Dispatcher] Plain card created: ${cardId}`);
         return true;
       }
     } else {
@@ -143,7 +141,7 @@ export function createDingtalkReplyDispatcher(
         content: '',
       };
 
-      console.log(`[DingTalk][Dispatcher] Creating AI Card...`);
+      log?.info?.(`[DingTalk][Dispatcher] Creating AI Card...`);
       const cardId = await createAICardForTarget(
         dingtalkConfig,
         aiCardTarget,
@@ -159,33 +157,32 @@ export function createDingtalkReplyDispatcher(
           target: aiCardTarget,
         };
         aiCardContent = '';
-        console.log(`[DingTalk][Dispatcher] AI Card created: ${cardId}`);
-        log?.info?.(`[DingTalk][Dispatcher] AI Card 创建成功: ${cardId}`);
+        log?.info?.(`[DingTalk][Dispatcher] AI Card created: ${cardId}`);
         return true;
       }
     }
 
-    console.error('[DingTalk][Dispatcher] Failed to create card');
+    log?.error?.('[DingTalk][Dispatcher] Failed to create card');
     return false;
   };
 
   // 更新卡片内容（流式）
   const updateCard = async (text: string): Promise<void> => {
-    console.log(`[DingTalk][Dispatcher] updateCard called, text length: ${text?.length || 0}, usePlainCard: ${usePlainCard}, pendingAICard: ${!!pendingAICard}, pendingPlainCard: ${!!pendingPlainCard}`);
+    log?.debug?.(`[DingTalk][Dispatcher] updateCard called, text length: ${text?.length || 0}, usePlainCard: ${usePlainCard}, pendingAICard: ${!!pendingAICard}, pendingPlainCard: ${!!pendingPlainCard}`);
     if (usePlainCard && pendingPlainCard) {
       // 普通卡片：只累积内容，不流式更新
       plainCardContent += text;
-      console.log(`[DingTalk][Dispatcher] Plain card content updated, length: ${plainCardContent.length}`);
+      log?.debug?.(`[DingTalk][Dispatcher] Plain card content updated, length: ${plainCardContent.length}`);
     } else if (pendingAICard) {
       // AI Card：累积内容并流式更新
       const token = await ensureToken();
       if (!token) {
-        console.error('[DingTalk][Dispatcher] Cannot get token for updateCard');
+        log?.error?.('[DingTalk][Dispatcher] Cannot get token for updateCard');
         return;
       }
 
       aiCardContent += text;
-      console.log(`[DingTalk][Dispatcher] Streaming AI Card update, cardId: ${pendingAICard.cardId}, content length: ${aiCardContent.length}`);
+      log?.debug?.(`[DingTalk][Dispatcher] Streaming AI Card update, cardId: ${pendingAICard.cardId}, content length: ${aiCardContent.length}`);
 
       await streamAICard(
         dingtalkConfig,
@@ -195,25 +192,25 @@ export function createDingtalkReplyDispatcher(
         token,
         log,
       );
-      console.log(`[DingTalk][Dispatcher] AI Card stream update completed`);
+      log?.debug?.(`[DingTalk][Dispatcher] AI Card stream update completed`);
     } else {
-      console.warn(`[DingTalk][Dispatcher] No pending card to update. usePlainCard=${usePlainCard}, pendingAICard=${!!pendingAICard}, pendingPlainCard=${!!pendingPlainCard}`);
+      log?.warn?.(`[DingTalk][Dispatcher] No pending card to update. usePlainCard=${usePlainCard}, pendingAICard=${!!pendingAICard}, pendingPlainCard=${!!pendingPlainCard}`);
     }
   };
 
   // 完成卡片
   const finishCard = async (): Promise<void> => {
-    console.log(`[DingTalk][Dispatcher] finishCard called, usePlainCard=${usePlainCard}, pendingAICard=${!!pendingAICard}, pendingPlainCard=${!!pendingPlainCard}`);
+    log?.info?.(`[DingTalk][Dispatcher] finishCard called, usePlainCard=${usePlainCard}, pendingAICard=${!!pendingAICard}, pendingPlainCard=${!!pendingPlainCard}`);
     const token = await ensureToken();
     if (!token) {
-      console.error('[DingTalk][Dispatcher] Cannot get token for finishCard');
+      log?.error?.('[DingTalk][Dispatcher] Cannot get token for finishCard');
       return;
     }
 
     if (usePlainCard && pendingPlainCard) {
       // 后处理最终内容
       const finalContent = await processTextWithMedia(plainCardContent);
-      console.log(`[DingTalk][Dispatcher] Finishing plain card: ${pendingPlainCard.cardId}`);
+      log?.info?.(`[DingTalk][Dispatcher] Finishing plain card: ${pendingPlainCard.cardId}`);
 
       // 完成普通卡片
       await finishPlainCard(
@@ -225,8 +222,7 @@ export function createDingtalkReplyDispatcher(
         log,
       );
 
-      console.log(`[DingTalk][Dispatcher] Plain card finished: ${pendingPlainCard.cardId}`);
-      log?.info?.(`[DingTalk][Dispatcher] 普通卡片完成: ${pendingPlainCard.cardId}`);
+      log?.info?.(`[DingTalk][Dispatcher] Plain card finished: ${pendingPlainCard.cardId}`);
 
       // 清理状态
       pendingPlainCard = null;
@@ -234,7 +230,7 @@ export function createDingtalkReplyDispatcher(
     } else if (pendingAICard) {
       // 后处理最终内容
       const finalContent = await processTextWithMedia(aiCardContent);
-      console.log(`[DingTalk][Dispatcher] Finishing AI Card: ${pendingAICard.cardId}`);
+      log?.info?.(`[DingTalk][Dispatcher] Finishing AI Card: ${pendingAICard.cardId}`);
 
       // 完成 AI Card
       await finishAICard(
@@ -246,14 +242,13 @@ export function createDingtalkReplyDispatcher(
         log,
       );
 
-      console.log(`[DingTalk][Dispatcher] AI Card finished: ${pendingAICard.cardId}`);
-      log?.info?.(`[DingTalk][Dispatcher] AI Card 完成: ${pendingAICard.cardId}`);
+      log?.info?.(`[DingTalk][Dispatcher] AI Card finished: ${pendingAICard.cardId}`);
 
       // 清理状态
       pendingAICard = null;
       aiCardContent = '';
     } else {
-      console.warn('[DingTalk][Dispatcher] No pending card to finish');
+      log?.warn?.('[DingTalk][Dispatcher] No pending card to finish');
     }
   };
 
@@ -274,7 +269,6 @@ export function createDingtalkReplyDispatcher(
   const dispatcher: ReplyDispatcher = {
     sendToolResult: (payload: ReplyPayload): boolean => {
       const text = payload.text?.slice(0, 50);
-      console.log(`[DingTalk][Dispatcher] Tool result: ${text}`);
       log?.debug?.(`[DingTalk][Dispatcher] Tool result: ${text}`);
       // 工具结果不发送到用户，只记录日志
       return true;
@@ -282,18 +276,18 @@ export function createDingtalkReplyDispatcher(
 
     sendBlockReply: (payload: ReplyPayload): boolean => {
       isIdle = false;
-      console.log(`[DingTalk][Dispatcher] sendBlockReply called: ${payload.text?.slice(0, 50)}...`);
+      log?.info?.(`[DingTalk][Dispatcher] sendBlockReply called: ${payload.text?.slice(0, 50)}...`);
 
       // 异步处理流式块
       (async () => {
         try {
           // 如果没有待处理的卡片，初始化一个
           if (!pendingAICard && !pendingPlainCard) {
-            console.log(`[DingTalk][Dispatcher] No pending card, initializing...`);
+            log?.info?.(`[DingTalk][Dispatcher] No pending card, initializing...`);
             const created = await initCard();
             if (!created) {
               // 卡片创建失败，降级为普通消息
-              console.log(`[DingTalk][Dispatcher] Card init failed, falling back to text`);
+              log?.warn?.(`[DingTalk][Dispatcher] Card init failed, falling back to text`);
               await sendTextReply(payload.text || '');
               return;
             }
@@ -304,8 +298,7 @@ export function createDingtalkReplyDispatcher(
             await updateCard(payload.text);
           }
         } catch (err: any) {
-          console.error(`[DingTalk][Dispatcher] sendBlockReply failed: ${err?.message || err}`);
-          log?.error?.(`[DingTalk][Dispatcher] sendBlockReply 失败: ${err?.message || err}`);
+          log?.error?.(`[DingTalk][Dispatcher] sendBlockReply failed: ${err?.message || err}`);
         }
       })();
 
@@ -314,18 +307,18 @@ export function createDingtalkReplyDispatcher(
 
     sendFinalReply: (payload: ReplyPayload): boolean => {
       isIdle = false;
-      console.log(`[DingTalk][Dispatcher] sendFinalReply called: ${payload.text?.slice(0, 50)}...`);
+      log?.info?.(`[DingTalk][Dispatcher] sendFinalReply called: ${payload.text?.slice(0, 50)}...`);
 
       // 异步处理最终回复
       (async () => {
         try {
           // 如果没有待处理的卡片，初始化一个
           if (!pendingAICard && !pendingPlainCard) {
-            console.log(`[DingTalk][Dispatcher] No pending card, initializing...`);
+            log?.info?.(`[DingTalk][Dispatcher] No pending card, initializing...`);
             const created = await initCard();
             if (!created) {
               // 卡片创建失败，降级为普通消息
-              console.log(`[DingTalk][Dispatcher] Card init failed, falling back to text`);
+              log?.warn?.(`[DingTalk][Dispatcher] Card init failed, falling back to text`);
               await sendTextReply(payload.text || '');
               isIdle = true;
               return;
@@ -340,8 +333,7 @@ export function createDingtalkReplyDispatcher(
           // 完成卡片
           await finishCard();
         } catch (err: any) {
-          console.error(`[DingTalk][Dispatcher] sendFinalReply failed: ${err?.message || err}`);
-          log?.error?.(`[DingTalk][Dispatcher] sendFinalReply 失败: ${err?.message || err}`);
+          log?.error?.(`[DingTalk][Dispatcher] sendFinalReply failed: ${err?.message || err}`);
         } finally {
           isIdle = true;
         }
