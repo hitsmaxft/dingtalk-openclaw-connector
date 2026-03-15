@@ -149,3 +149,132 @@ export async function sendAICardInternal(
     log?.error?.(`[DingTalk][sendAICardInternal] 发送失败: ${err?.message || err}`);
   }
 }
+
+// ============ 普通卡片支持 ============
+
+export interface PlainCardConfig {
+  title: string;
+  content: string;
+}
+
+export interface PlainCardInstance {
+  cardInstanceId: string;
+  accessToken: string;
+}
+
+/**
+ * 创建普通卡片（非 AI Card）
+ * 使用标准 Markdown 卡片模板
+ */
+export async function createPlainCard(
+  cfg: DingTalkConfig,
+  target: AICardTarget,
+  cardConfig: PlainCardConfig,
+  token: string,
+  log?: any,
+): Promise<string | null> {
+  try {
+    // 普通卡片使用不同的模板 ID，例如标准 Markdown 卡片
+    const templateId = cfg.plainCardTemplateId || 'StandardMarkdownCard';
+
+    const resp = await axios.post(
+      'https://api.dingtalk.com/v1.0/im/interactiveCards/instances',
+      {
+        cardTemplateId: templateId,
+        openConversationId: target.openConversationId,
+        singleChatReceiver: target.userId ? { userId: target.userId } : undefined,
+        cardData: JSON.stringify({
+          title: cardConfig.title,
+          content: cardConfig.content,
+        }),
+        // 普通卡片不需要流式状态更新
+        cardBizType: 0,
+      },
+      {
+        headers: {
+          'x-acs-dingtalk-access-token': token,
+          'Content-Type': 'application/json',
+        },
+      },
+    );
+
+    if (resp.data?.success && resp.data?.result?.cardInstanceId) {
+      const cardId = resp.data.result.cardInstanceId;
+      log?.info?.(`[DingTalk][createPlainCard] 普通卡片创建成功: ${cardId}`);
+      return cardId;
+    }
+
+    log?.error?.(`[DingTalk][createPlainCard] 创建失败: ${JSON.stringify(resp.data)}`);
+    return null;
+  } catch (err: any) {
+    log?.error?.(`[DingTalk][createPlainCard] 错误: ${err?.message || err}`);
+    return null;
+  }
+}
+
+/**
+ * 更新普通卡片内容
+ */
+export async function updatePlainCard(
+  cfg: DingTalkConfig,
+  cardId: string,
+  content: string,
+  target: AICardTarget,
+  token: string,
+  log?: any,
+): Promise<void> {
+  try {
+    await axios.put(
+      `https://api.dingtalk.com/v1.0/im/interactiveCards/instances/${cardId}`,
+      {
+        cardData: JSON.stringify({
+          content,
+        }),
+      },
+      {
+        headers: {
+          'x-acs-dingtalk-access-token': token,
+          'Content-Type': 'application/json',
+        },
+      },
+    );
+
+    log?.debug?.(`[DingTalk][updatePlainCard] 普通卡片更新成功: ${cardId}`);
+  } catch (err: any) {
+    log?.error?.(`[DingTalk][updatePlainCard] 更新失败: ${err?.message || err}`);
+  }
+}
+
+/**
+ * 完成普通卡片
+ */
+export async function finishPlainCard(
+  cfg: DingTalkConfig,
+  cardId: string,
+  content: string,
+  target: AICardTarget,
+  token: string,
+  log?: any,
+): Promise<void> {
+  try {
+    await axios.put(
+      `https://api.dingtalk.com/v1.0/im/interactiveCards/instances/${cardId}`,
+      {
+        cardData: JSON.stringify({
+          content,
+          finished: true,
+        }),
+      },
+      {
+        headers: {
+          'x-acs-dingtalk-access-token': token,
+          'Content-Type': 'application/json',
+        },
+      },
+    );
+
+    log?.info?.(`[DingTalk][finishPlainCard] 普通卡片完成: ${cardId}`);
+  } catch (err: any) {
+    log?.error?.(`[DingTalk][finishPlainCard] 完成失败: ${err?.message || err}`);
+  }
+}

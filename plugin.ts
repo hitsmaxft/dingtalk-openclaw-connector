@@ -3112,6 +3112,7 @@ const dingtalkPlugin = {
         separateSessionByConversation: { type: 'boolean', default: true, description: '是否按单聊/群聊/群区分 session' },
         sharedMemoryAcrossConversations: { type: 'boolean', default: false, description: '单 agent 场景下是否共享记忆；false 时不同群聊、群聊与私聊记忆隔离' },
         useSessionWebhookOnly: { type: 'boolean', default: false, description: 'AI Card 场景仅使用 sessionWebhook 发送媒体，避免主动消息 API 的 IP 白名单要求' },
+        usePlainCard: { type: 'boolean', default: false, description: '使用普通卡片代替 AI Card 进行流式输出' },
         debug: { type: 'boolean', default: false },
       },
       required: ['clientId', 'clientSecret'],
@@ -3123,6 +3124,7 @@ const dingtalkPlugin = {
       dmPolicy: { label: 'DM Policy' },
       groupPolicy: { label: 'Group Policy' },
       useSessionWebhookOnly: { label: 'Use Session Webhook Only' },
+      usePlainCard: { label: 'Use Plain Card (非 AI Card)' },
     },
   },
   config: {
