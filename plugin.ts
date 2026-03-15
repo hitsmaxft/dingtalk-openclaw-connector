@@ -30,15 +30,6 @@ function getRuntime(): PluginRuntime {
 
 // ============ Session 管理 ============
 
-/** 用户会话状态：记录最后活跃时间和当前 session 标识 */
-interface UserSession {
-  lastActivity: number;
-  sessionId: string;  // 格式: dingtalk-connector:<senderId> 或 dingtalk-connector:<senderId>:<timestamp>
-}
-
-/** 用户会话缓存 Map<senderId, UserSession> */
-const userSessions = new Map<string, UserSession>();
-
 /** 消息去重缓存 Map<messageId, timestamp> - 防止同一消息被重复处理 */
 const processedMessages = new Map<string, number>();
 
@@ -356,9 +347,6 @@ function buildMediaSystemPrompt(): string {
  * - ![alt](C:/Users/xxx/photo.jpg)
  */
 const LOCAL_IMAGE_RE = /!\[([^\]]*)\]\(((?:file:\/\/\/|MEDIA:|attachment:\/\/\/)[^)]+|\/(?:tmp|var|private|Users|home|root)[^)]+|[A-Za-z]:[\\/ ][^)]+)\)/g;
-
-/** 图片文件扩展名 */
-const IMAGE_EXTENSIONS = /\.(png|jpg|jpeg|gif|bmp|webp|tiff|svg)$/i;
 
 /**
  * 匹配纯文本中的本地图片路径（不在 markdown 图片语法中，跨平台）：
@@ -1519,9 +1507,6 @@ async function downloadFileByCode(
 /** 可直接读取内容的文本类文件扩展名 */
 const TEXT_FILE_EXTENSIONS = new Set(['.txt', '.md', '.csv', '.json', '.xml', '.yaml', '.yml', '.html', '.htm', '.log', '.conf', '.ini', '.sh', '.py', '.js', '.ts', '.css', '.sql']);
 
-/** 需要保存但无法直接读取的 Office/二进制文件扩展名 */
-const OFFICE_FILE_EXTENSIONS = new Set(['.docx', '.xlsx', '.pptx', '.pdf', '.doc', '.xls', '.ppt', '.zip', '.rar', '.7z']);
-
 // ============ 消息处理 ============
 
 /** 消息内容提取结果 */
@@ -1775,6 +1760,31 @@ async function createAICardForTarget(
     }
     return null;
   }
+}
+
+/**
+ * 被动回复场景创建 AI Card
+ * 从 DingTalk 回调 data 推导 target 后委托给 createAICardForTarget
+ */
+async function createAICard(
+  config: any,
+  data: any,
+  log?: any,
+): Promise<AICardInstance | null> {
+  const conversationType = data?.conversationType;
+  const senderStaffId = data?.senderStaffId || data?.senderId;
+  const conversationId = data?.conversationId;
+
+  let target: AICardTarget;
+  if (conversationType === '1') {
+    // 单聊
+    target = { type: 'user', userId: senderStaffId };
+  } else {
+    // 群聊
+    target = { type: 'group', openConversationId: conversationId };
+  }
+
+  return createAICardForTarget(config, target, log);
 }
 
 /**
@@ -3876,6 +3886,7 @@ export const __testables = {
   // AI Card
   streamAICard,
   finishAICard,
+  createAICard,
   createAICardForTarget,
   sendFileProactive,
   sendAudioProactive,
