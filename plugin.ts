@@ -3,6 +3,8 @@
  *
  * 通过钉钉 Stream 模式连接，支持 AI Card 流式响应。
  * 完整接入 Moltbot 消息处理管道。
+ *
+ * VERSION: 2026-03-15-01 - Force reload for AI Card streaming fix
  */
 
 import { DWClient, TOPIC_ROBOT } from 'dingtalk-stream';
@@ -3337,6 +3339,7 @@ const dingtalkPlugin = {
         // 异步处理消息（不阻塞回调确认）
         try {
           ctx.log?.info?.(`[DingTalk] 原始 data: ${typeof res.data === 'string' ? res.data.slice(0, 500) : JSON.stringify(res.data).slice(0, 500)}`);
+          ctx.log?.info?.(`[DingTalk] 配置检查: usePlainCard=${config.usePlainCard}, aiCardTemplateId=${config.aiCardTemplateId}`);
           const data = JSON.parse(res.data);
 
           await handleDingTalkMessage({
