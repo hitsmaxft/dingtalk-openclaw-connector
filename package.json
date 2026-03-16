@@ -1,8 +1,8 @@
 {
   "name": "@dingtalk-real-ai/dingtalk-connector",
-  "version": "0.7.8",
+  "version": "0.7.9",
   "description": "DingTalk (钉钉) channel connector — Stream mode with AI Card streaming",
-  "main": "plugin.ts",
+  "main": "index.ts",
   "type": "module",
   "scripts": {
     "build": "echo 'No build needed - jiti loads TS at runtime'",
